@@ -55,8 +55,8 @@ func validateTransfersAreScheduled(c *chk.C, srcDirName, dstDirName string, expe
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range mockedRPC.transfers {
-		srcRelativeFilePath := strings.Replace(transfer.Source, srcDirName+common.AZCOPY_PATH_SEPARATOR_STRING, "", 1)
-		dstRelativeFilePath := strings.Replace(transfer.Destination, dstDirName+common.AZCOPY_PATH_SEPARATOR_STRING, "", 1)
+		srcRelativeFilePath := transfer.Source
+		dstRelativeFilePath := transfer.Destination
 
 		// the relative paths should be equal
 		c.Assert(srcRelativeFilePath, chk.Equals, dstRelativeFilePath)
@@ -126,7 +126,8 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		validateTransfersAreScheduled(c, containerURL.String(), dstDirName, blobList, mockedRPC)
+		validateTransfersAreScheduled(c, containerURL.NewBlobURL(blobName).String(),
+			filepath.Join(dstDirName, dstFileName), []string{""}, mockedRPC)
 	})
 }
 

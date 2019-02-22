@@ -60,22 +60,11 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 		s.copyJobTemplate.PartNum++
 	}
 
-	// In the case of single file transfers, relative path is empty and we must use the object name.
-	var source string
-	var destination string
-	if storedObject.relativePath == "" {
-		source = storedObject.name
-		destination = storedObject.name
-	} else {
-		source = storedObject.relativePath
-		destination = storedObject.relativePath
-	}
-
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
 	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, common.CopyTransfer{
-		Source:           source,
-		Destination:      destination,
+		Source:           storedObject.relativePath,
+		Destination:      storedObject.relativePath,
 		SourceSize:       storedObject.size,
 		LastModifiedTime: storedObject.lastModifiedTime,
 		ContentMD5:       storedObject.md5,
