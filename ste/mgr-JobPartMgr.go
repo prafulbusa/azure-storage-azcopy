@@ -70,7 +70,12 @@ func NewVersionPolicyFactory() pipeline.Factory {
 
 const AzCopyMaxIdleConnsPerHost = 500
 
-func newAzcopyHTTPClient() *http.Client {
+// NewAzcopyHTTPClient creates a new HTTP client.
+// We must minimize use of this, and instead maximize re-use of the returned client object.
+// Why? Because that makes our connection pooling more efficient, and prevents us exhausting the
+// number of available network sockets on resource-constrained Linux systems. (E.g. when
+// 'ulimit -Hn' is low).
+func NewAzcopyHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
@@ -108,7 +113,7 @@ func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factor
 }
 
 // NewBlobPipeline creates a Pipeline using the specified credentials and options.
-func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer, client *http.Client) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -123,12 +128,12 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		NewVersionPolicyFactory(),
 		azblob.NewRequestLogPolicyFactory(o.RequestLog),
 	}
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
 // The blobFS operations currently in azcopy are supported by SharedKey Credentials
-func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p *pacer, client *http.Client) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -146,11 +151,11 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 		NewPacerPolicyFactory(p),
 		azbfs.NewRequestLogPolicyFactory(o.RequestLog))
 
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // newFilePipeline creates a Pipeline using the specified credentials and options.
-func newFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p *pacer) pipeline.Pipeline {
+func newFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p *pacer, client *http.Client) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -165,7 +170,7 @@ func newFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		NewVersionPolicyFactory(),
 		azfile.NewRequestLogPolicyFactory(o.RequestLog),
 	}
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -379,7 +384,8 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 					TryTimeout:    UploadTryTimeout,
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay},
-				jpm.pacer)
+				jpm.pacer,
+				jpm.jobMgr.HttpClient())
 		// Create pipeline for Azure BlobFS.
 		case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
 			credential := common.CreateBlobFSCredential(ctx, credInfo, common.CredentialOpOptions{
@@ -405,7 +411,8 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 					TryTimeout:    UploadTryTimeout,
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay},
-				jpm.pacer)
+				jpm.pacer,
+				jpm.jobMgr.HttpClient())
 		// Create pipeline for Azure File.
 		case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile():
 			jpm.pipeline = newFilePipeline(
@@ -423,7 +430,8 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay,
 				},
-				jpm.pacer)
+				jpm.pacer,
+				jpm.jobMgr.HttpClient())
 		default:
 			panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 		}
