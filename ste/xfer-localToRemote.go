@@ -24,6 +24,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"hash"
 	"os"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -150,7 +151,12 @@ func scheduleUploadChunks(jptm IJobPartTransferMgr, srcName string, srcFile comm
 	cacheLimiter := jptm.CacheLimiter()
 
 	chunkCount := int32(0)
-	md5Hasher := md5.New()
+	var md5Hasher hash.Hash
+	if jptm.ShouldSuppressUploadMd5() {
+		md5Hasher = common.NewNullHasher()
+	} else {
+		md5Hasher = md5.New()
+	}
 	safeToUseHash := true
 	for startIndex := int64(0); startIndex < fileSize || isDummyChunkInEmptyFile(startIndex, fileSize); startIndex += int64(chunkSize) {
 
