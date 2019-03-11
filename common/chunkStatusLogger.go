@@ -94,6 +94,8 @@ func (WaitReason) DiskIO() WaitReason               { return WaitReason{10, "Dis
 func (WaitReason) ChunkDone() WaitReason            { return WaitReason{11, "Done"} }              // not waiting on anything. Chunk is done.
 func (WaitReason) Cancelled() WaitReason            { return WaitReason{12, "Cancelled"} }         // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
+func (WaitReason) CoarsePacerWait() WaitReason { return WaitReason{13, "CoarsePacerWait"} } // waiting to finish sending/receiving the BODY
+
 // TODO: consider change the above so that they don't create new struct on every call?  Is that necessary/useful?
 //     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
 //     the String method below, on the assumption that it will be called a lot.  Is that a premature optimization?
@@ -114,6 +116,8 @@ var uploadWaitReasons = []WaitReason{
 	// This next one is used when waiting for a worker Go routine to pick up the scheduled chunk func.
 	// Chunks in this state are effectively a queue of work waiting to be sent over the network
 	EWaitReason.WorkerGR(),
+
+	EWaitReason.CoarsePacerWait(),
 
 	// This is the actual network activity
 	EWaitReason.Body(), // header is not separated out for uploads, so is implicitly included here
@@ -187,7 +191,7 @@ func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) 
 }
 
 func numWaitReasons() int32 {
-	return EWaitReason.Cancelled().index + 1 // assume this is the last wait reason
+	return EWaitReason.CoarsePacerWait().index + 1 // assume this is the last wait reason
 }
 
 type chunkStatusCount struct {

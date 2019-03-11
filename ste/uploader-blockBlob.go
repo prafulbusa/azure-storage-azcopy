@@ -45,6 +45,7 @@ type blockBlobUploader struct {
 	mu               *sync.Mutex // protects the fields below
 	blockIds         []string
 	md5Channel       chan []byte
+	filePacer        *pacerTest
 }
 
 func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -76,6 +77,7 @@ func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeli
 		mu:           &sync.Mutex{},
 		blockIds:     make([]string, numChunks),
 		md5Channel:   newMd5Channel(),
+		filePacer:    NewPacerTest(jptm.Context(), 64*1024*1024, int64(chunkSize)),
 	}, nil
 }
 
@@ -133,6 +135,11 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 		// step 2: save the block ID into the list of block IDs
 		u.setBlockId(blockIndex, encodedBlockId)
 
+		jptm.LogChunkStatus(id, common.EWaitReason.CoarsePacerWait())
+		if err := u.filePacer.RequestRightToSend(jptm.Context(), reader.Length()); err != nil {
+			jptm.FailActiveUpload("Pacing block", err)
+		}
+
 		// step 3: perform put block
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newLiteRequestBodyPacer(reader, u.pacer)
@@ -186,6 +193,8 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 func (u *blockBlobUploader) Epilogue() {
 	jptm := u.jptm
+
+	u.filePacer.Done()
 
 	u.mu.Lock()
 	blockIds := u.blockIds
