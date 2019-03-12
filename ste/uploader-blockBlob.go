@@ -135,6 +135,7 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 		// step 2: save the block ID into the list of block IDs
 		u.setBlockId(blockIndex, encodedBlockId)
 
+		// TODO: remove. This was just for testing. It needs to be moved to, and integrated into , BlockBLob code
 		jptm.LogChunkStatus(id, common.EWaitReason.CoarsePacerWait())
 		if err := u.filePacer.RequestRightToSend(jptm.Context(), reader.Length()); err != nil {
 			jptm.FailActiveUpload("Pacing block", err)

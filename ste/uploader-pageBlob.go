@@ -135,12 +135,17 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newLiteRequestBodyPacer(reader, u.pacer)
-		_, err := u.pageBlobUrl.UploadPages(jptm.Context(), id.OffsetInFile, body, azblob.PageBlobAccessConditions{}, nil)
+		enrichedContext := withRetryNotification(jptm.Context(), u) // TODO: do we need to cancel/close enrichedContext?  I THINK not, because I THINK only deadline and cancellable versions leak if not closed
+		_, err := u.pageBlobUrl.UploadPages(enrichedContext, id.OffsetInFile, body, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading page", err)
 			return
 		}
 	})
+}
+
+func (u *pageBlobUploader) RetryCallback() {
+	// do something here, to slow down the per-file-pacer
 }
 
 func (u *pageBlobUploader) Epilogue() {
