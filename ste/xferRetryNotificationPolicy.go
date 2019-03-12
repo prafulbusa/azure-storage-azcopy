@@ -55,14 +55,19 @@ type retryNotificationPolicy struct {
 // time our RetryPolicy will have actually DONE the retry, so the status will be successful. That's why, if the
 // top level caller wants to be informed, they have to get informed by this callback mechanism.)
 func (r *retryNotificationPolicy) Do(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
+
 	resp, err := r.next.Do(ctx, request)
-	if resp != nil && resp.Response().StatusCode == http.StatusServiceUnavailable {
-		// Grab the notification callback out of the context and, if its there, call it
-		notifier, ok := ctx.Value(retryNotifyContextKey).(retryNotificationReceiver)
-		if ok {
-			notifier.RetryCallback()
+
+	if resp != nil {
+		if rr := resp.Response(); rr != nil && rr.StatusCode == http.StatusServiceUnavailable {
+			// Grab the notification callback out of the context and, if its there, call it
+			notifier, ok := ctx.Value(retryNotifyContextKey).(retryNotificationReceiver)
+			if ok {
+				notifier.RetryCallback()
+			}
 		}
 	}
+
 	return resp, err
 }
 
